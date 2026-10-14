@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrewSpot - Sagot ko na ang spot mo!</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        coffee: {
+                            50: '#fdfbf7',
+                            100: '#f5efe6',
+                            200: '#e6dcd0',
+                            300: '#c8b7a6',
+                            600: '#8c6d53',
+                            700: '#6f543f',
+                            800: '#533e2d',
+                            900: '#3b2f2f',
+                        },
+                        amberGold: '#d97706',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fdfbf7;
+            color: #3b2f2f;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c8b7a6;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-full flex flex-col bg-coffee-50">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-40 bg-coffee-900 text-coffee-100 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full bg-amber-600 flex items-center justify-center text-white shadow-inner">
+                    <i class="fa-solid fa-mug-hot text-lg"></i>
+                </div>
+                <div>
+                    <span class="text-xl font-bold tracking-tight text-white">BrewSpot</span>
+                    <span class="text-xs text-amber-400 block">Sagot ko na ang location mo!</span>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="useGPS()" class="bg-coffee-800 hover:bg-coffee-700 text-white px-3 py-2 rounded-full text-xs font-medium border border-coffee-700 flex items-center space-x-1.5 transition">
+                    <i class="fa-solid fa-crosshairs text-amber-400"></i>
+                    <span class="hidden sm:inline">Use Location</span>
+                </button>
+                <button onclick="openLocationModal()" class="flex items-center space-x-2 bg-amber-600 hover:bg-amber-700 px-3.5 py-2 rounded-full text-xs border border-amber-600 text-white transition shadow-sm cursor-pointer font-medium">
+                    <i class="fa-solid fa-map-location-dot"></i>
+                    <span id="currentLocationLabel">Select Location</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="bg-gradient-to-b from-coffee-900 to-coffee-800 text-white py-8 px-4 text-center">
+        <div class="max-w-2xl mx-auto">
+            <h1 class="text-2xl sm:text-3xl font-extrabold mb-2">Nearest Coffee Finder</h1>
+            <p class="text-xs sm:text-sm text-coffee-300 mb-4">Pin a location and list mapped coffee shops nearby.</p>
+            <button onclick="openLocationModal()" class="bg-amber-600 hover:bg-amber-700 text-white font-medium px-5 py-2.5 rounded-xl shadow transition inline-flex items-center space-x-2 text-xs">
+                <i class="fa-solid fa-map"></i>
+                <span>Choose Location on Map</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- Main Content Grid -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-2">
+            <div>
+                <h2 id="resultsCount" class="text-lg font-bold text-coffee-900">Ready to find coffee shops</h2>
+                <p id="citySubtitle" class="text-xs text-coffee-600">Active Coordinates: Ready</p>
+            </div>
+            <div class="text-xs text-coffee-600 flex items-center bg-white px-3 py-1.5 rounded-lg border border-coffee-200 shadow-sm">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
+                <span>API by OpenStreetMap (guarantee a latency experience so please keep refreshing if result not found)</span>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="text-center py-20">
+            <div class="inline-block w-10 h-10 border-4 border-amber-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+            <p class="text-sm font-bold text-coffee-900" id="loadingText">Finding coffee shops...</p>
+            <p class="text-xs text-coffee-600 mt-1">Searching mapped coffee locations</p>
+        </div>
+
+        <div id="controlBar" class="hidden mb-4 space-y-3">
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="text-coffee-600">Sort by</span>
+                <button id="sortDistance" onclick="setSort('distance')"></button>
+                <button id="sortTime" onclick="setSort('time')"></button>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="text-coffee-600">Travel time</span>
+                <span id="filterChips" class="flex flex-wrap items-center gap-2"></span>
+                <span id="filterStatus" class="text-coffee-600"></span>
+            </div>
+        </div>
+
+        <div id="shopGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Populated dynamically -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden text-center py-16">
+            <div class="w-14 h-14 bg-coffee-200 rounded-full flex items-center justify-center mx-auto text-coffee-600 mb-3 text-lg">
+                <i class="fa-solid fa-mug-hot"></i>
+            </div>
+            <h3 class="text-base font-bold text-coffee-900 mb-1">No coffee spots within immediate range</h3>
+            <p class="text-xs text-coffee-600 mb-4">Try shifting your pin closer to a town center or commercial strip.</p>
+            <div class="flex justify-center gap-2">
+                <button id="retryButton" onclick="retryLastSearch()" class="hidden bg-coffee-800 text-white px-4 py-2 rounded-lg text-xs font-medium">Try Again</button>
+                <button onclick="openLocationModal()" class="bg-amber-600 text-white px-4 py-2 rounded-lg text-xs font-medium">Choose Another Location</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Location Picker Modal -->
+    <div id="locationModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-xl w-full p-5 shadow-2xl relative flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+                <div>
+                    <h3 class="text-base font-bold text-coffee-900">Pin Target Location</h3>
+                    <p class="text-xs text-coffee-600">Drag or pan map to center pin on your search area</p>
+                </div>
+                <button onclick="closeLocationModal()" class="text-coffee-400 hover:text-coffee-900 w-8 h-8 flex items-center justify-center rounded-full bg-coffee-100">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Leaflet Map Container with Center Pin -->
+            <div class="relative w-full h-[320px] rounded-xl overflow-hidden border border-coffee-300 mb-4">
+                <div id="mapPicker" class="w-full h-full"></div>
+                <div class="absolute inset-0 pointer-events-none flex items-center justify-center z-[1000]">
+                    <div class="w-8 h-8 rounded-full bg-amber-600 border-2 border-white shadow-lg flex items-center justify-center text-white text-xs animate-bounce">
+                        <i class="fa-solid fa-location-dot"></i>
+                    </div>
+                </div>
+                <div class="absolute bottom-2 left-2 z-[1000] bg-coffee-900/90 text-white text-[10px] px-2.5 py-1 rounded shadow">
+                    Target Area: <span id="selectedLocationText" class="text-amber-400 font-semibold">Detecting...</span>
+                </div>
+            </div>
+
+            <div class="flex justify-end space-x-2">
+                <button onclick="closeLocationModal()" class="px-4 py-2 bg-coffee-200 text-coffee-900 text-xs font-medium rounded-xl">Cancel</button>
+                <button onclick="confirmLocation()" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-xl shadow">
+                    Find Coffee Shops Here
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map = null;
+        let selectedLat = 14.5772;
+        let selectedLng = 121.1321;
+        let currentAreaName = "Taytay, Rizal";
+        let activeSearchId = 0;
+        let reverseGeocodeRequestId = 0;
+        let reverseGeocodeTimer = null;
+
+        const TIME_MARKS = [5, 10, 20, 30, 45, 60, 90, 120]; // candidate travel-time filters (minutes)
+        let currentShops = [];
+        let lastSearch = null;      // remembered so the search can be retried
+        let sortMode = 'distance';
+        let timeFilter = null;     // null = show every shop
+        let timesDone = 0;
+        let timesReady = false;
+
+        function openLocationModal() {
+            const modal = document.getElementById('locationModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            // Leaflet needs a size refresh after its container becomes visible.
+            setTimeout(() => {
+                if (!map) {
+                    map = L.map('mapPicker').setView([selectedLat, selectedLng], 14);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19,
+                        attribution: '&copy; OpenStreetMap'
+                    }).addTo(map);
+
+                    // Update the selected point only once the user finishes panning/zooming.
+                    // Using 'move' here fires many reverse-geocoding requests during a drag.
+                    map.on('moveend', updateSelectionFromMap);
+                } else {
+                    map.invalidateSize(true);
+                    map.setView([selectedLat, selectedLng], map.getZoom(), { animate: false });
+                }
+
+                map.invalidateSize(true);
+                updateSelectionFromMap();
+            }, 120);
+        }
+
+        function updateSelectionFromMap() {
+            if (!map) return;
+            const center = map.getCenter();
+            selectedLat = Number(center.lat.toFixed(6));
+            selectedLng = Number(center.lng.toFixed(6));
+            const target = document.getElementById('selectedLocationText');
+            if (target) target.textContent = `Loading area… (${selectedLat.toFixed(5)}, ${selectedLng.toFixed(5)})`;
+            scheduleReverseGeocode(selectedLat, selectedLng);
+        }
+
+        function scheduleReverseGeocode(lat, lng) {
+            clearTimeout(reverseGeocodeTimer);
+            reverseGeocodeTimer = setTimeout(() => {
+                // Do not let a slower response for an older map position replace the latest label.
+                reverseGeocodeLocation(lat, lng);
+            }, 450);
+        }
+
+        function closeLocationModal() {
+            const modal = document.getElementById('locationModal');
+            modal.classList.remove('flex');
+            modal.classList.add('hidden');
+        }
+
+        async function reverseGeocodeLocation(lat, lng) {
+            const requestId = ++reverseGeocodeRequestId;
+            const fallbackLabel = `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 7000);
+                let res;
+                try {
+                    res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=12`, {
+                        headers: { 'Accept-Language': 'en' },
+                        signal: controller.signal
+                    });
+                } finally {
+                    clearTimeout(timeoutId);
+                }
+                if (!res.ok) throw new Error(`Reverse geocoding returned HTTP ${res.status}`);
+                const data = await res.json();
+                const address = data.address || {};
+                const locality = address.city || address.town || address.municipality || address.county || address.suburb || address.village || address.neighbourhood || address.hamlet || 'Local Area';
+                const state = address.state || address.province || address.region || '';
+                const resolvedName = state ? `${locality}, ${state}` : locality;
+
+                if (requestId !== reverseGeocodeRequestId) return;
+                currentAreaName = resolvedName;
+                const selectedText = document.getElementById('selectedLocationText');
+                if (selectedText) selectedText.textContent = `${resolvedName} (${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)})`;
+            } catch (e) {
+                if (requestId !== reverseGeocodeRequestId) return;
+                currentAreaName = fallbackLabel;
+                const selectedText = document.getElementById('selectedLocationText');
+                if (selectedText) selectedText.textContent = fallbackLabel;
+                console.warn('Reverse geocoding unavailable; using coordinates:', e);
+            }
+        }
+
+        async function confirmLocation() {
+            // Read the map center directly on confirmation; do not rely on the asynchronous move event.
+            if (map) {
+                const center = map.getCenter();
+                selectedLat = Number(center.lat.toFixed(6));
+                selectedLng = Number(center.lng.toFixed(6));
+            }
+
+            const lat = selectedLat;
+            const lon = selectedLng;
+            const confirmButton = document.querySelector('#locationModal button[onclick="confirmLocation()"]');
+            if (confirmButton) {
+                confirmButton.disabled = true;
+                confirmButton.textContent = 'Searching…';
+            }
+
+            // Search immediately using the exact pin coordinates. Reverse geocoding is only a label,
+            // so a slow or rate-limited address lookup must never block coffee results.
+            const labelAtSelection = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+            document.getElementById('currentLocationLabel').textContent = 'Pinned location';
+            document.getElementById('citySubtitle').textContent = `Pinned coordinates: ${labelAtSelection}`;
+            closeLocationModal();
+            const searchPromise = searchCoffeeEngine(lat, lon, currentAreaName || labelAtSelection);
+            reverseGeocodeLocation(lat, lon).then(() => {
+                document.getElementById('currentLocationLabel').textContent = currentAreaName;
+                document.getElementById('citySubtitle').textContent = `Pinned location: ${currentAreaName} (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
+            });
+            try {
+                await searchPromise;
+            } catch (error) {
+                console.error('Pinned-location search failed:', error);
+                document.getElementById('loadingState').classList.add('hidden');
+                const emptyState = document.getElementById('emptyState');
+                emptyState.classList.remove('hidden');
+                emptyState.querySelector('h3').textContent = 'Search could not be completed';
+                emptyState.querySelector('p').textContent = 'Please check your connection and try selecting this location again.';
+                document.getElementById('resultsCount').textContent = 'Coffee search failed';
+            } finally {
+                if (confirmButton) {
+                    confirmButton.disabled = false;
+                    confirmButton.textContent = 'Find Coffee Shops Here';
+                }
+            }
+        }
+
+        function useGPS() {
+            if (!navigator.geolocation) {
+                alert("Geolocation is not supported by your browser");
+                return;
+            }
+            document.getElementById('loadingState').classList.remove('hidden');
+            document.getElementById('shopGrid').innerHTML = '';
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                selectedLat = Number(pos.coords.latitude.toFixed(6));
+                selectedLng = Number(pos.coords.longitude.toFixed(6));
+                await reverseGeocodeLocation(selectedLat, selectedLng);
+                document.getElementById('currentLocationLabel').textContent = currentAreaName;
+                document.getElementById('citySubtitle').textContent = `GPS Location: ${currentAreaName}`;
+                await searchCoffeeEngine(selectedLat, selectedLng, currentAreaName);
+            }, (err) => {
+                document.getElementById('loadingState').classList.add('hidden');
+                alert("Unable to retrieve GPS location.");
+            }, { timeout: 10000 });
+        }
+
+        // Search all coffee venues returned by OpenStreetMap within the selected area.
+        // No fabricated fallback venues or ratings are added.
+        async function searchCoffeeEngine(lat, lon, areaLabel) {
+            // Each search gets an ID so late routing responses from an older location
+            // cannot overwrite travel times for the user's newly selected pin.
+            const thisSearchId = ++activeSearchId;
+            const grid = document.getElementById('shopGrid');
+            const emptyState = document.getElementById('emptyState');
+            const loadingState = document.getElementById('loadingState');
+            const resultsCount = document.getElementById('resultsCount');
+            const loadingText = document.getElementById('loadingText');
+            lastSearch = { lat, lon, areaLabel };
+            document.getElementById('retryButton').classList.add('hidden');
+
+            grid.innerHTML = '';
+            currentShops = [];
+            timeFilter = null;
+            timesDone = 0;
+            timesReady = false;
+            updateControls();
+            emptyState.classList.add('hidden');
+            loadingState.classList.remove('hidden');
+            resultsCount.textContent = `Searching coffee shops near ${areaLabel}...`;
+            loadingText.textContent = 'Searching OpenStreetMap for nearby coffee shops...';
+
+            // Search radius can be increased here. 10 km is a practical default.
+            const radiusMeters = 10000;
+            const makeQuery = (radius) => `[out:json][timeout:30];(
+                nwr(around:${radius},${lat},${lon})["amenity"="cafe"];
+                nwr(around:${radius},${lat},${lon})["shop"="coffee"];
+                nwr(around:${radius},${lat},${lon})["cuisine"~"coffee|cafe",i];
+            );out center tags;`;
+
+            let elements = [];
+            let searchError = '';
+            let actualRadiusMeters = radiusMeters;
+            // Public Overpass instances occasionally throttle requests. Try another instance on failure.
+            const endpoints = [
+                'https://overpass-api.de/api/interpreter',
+                'https://overpass.kumi.systems/api/interpreter',
+                'https://overpass.nchc.org.tw/api/interpreter',
+                'https://overpass.private.coffee/api/interpreter'
+            ];
+
+            const runOverpassQuery = async (queryText) => {
+                let lastError = 'Unable to contact the map database.';
+                for (const endpoint of endpoints) {
+                    let timeoutId;
+                    try {
+                        const controller = new AbortController();
+                        timeoutId = setTimeout(() => controller.abort(), 35000);
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                            body: 'data=' + encodeURIComponent(queryText),
+                            signal: controller.signal
+                        });
+                        if (!response.ok) throw new Error(`Map database returned HTTP ${response.status}`);
+                        const data = await response.json();
+                        if (!data || !Array.isArray(data.elements)) throw new Error('The map database returned an invalid response.');
+                        return { elements: data.elements, error: '' };
+                    } catch (err) {
+                        lastError = err.message || 'Unable to contact the map database.';
+                        console.warn('Coffee search endpoint failed:', endpoint, err);
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                }
+                return { elements: [], error: lastError };
+            };
+
+            const firstPass = await runOverpassQuery(makeQuery(radiusMeters));
+            elements = firstPass.elements;
+            searchError = firstPass.error;
+
+            // If the 10 km query succeeds but returns no mapped records at all, expand the search
+            // once to 20 km. This is particularly helpful when a user pins a quieter/suburban area.
+            if (!searchError && elements.length === 0) {
+                const expandedRadius = 20000;
+                loadingText.textContent = 'No nearby records yet; expanding the search to 20 km…';
+                const secondPass = await runOverpassQuery(makeQuery(expandedRadius));
+                if (secondPass.error) {
+                    // Preserve the successful empty first query rather than reporting a hard failure.
+                    console.warn('Expanded coffee search failed:', secondPass.error);
+                } else {
+                    elements = secondPass.elements;
+                    actualRadiusMeters = expandedRadius;
+                }
+            }
+
+            // A newer pin was chosen while this search was running; do not overwrite its results.
+            if (thisSearchId !== activeSearchId) return;
+
+            loadingState.classList.add('hidden');
+
+            if (searchError) {
+                resultsCount.textContent = 'Could not load coffee shops';
+                emptyState.classList.remove('hidden');
+                emptyState.querySelector('h3').textContent = 'Coffee shop search failed';
+                emptyState.querySelector('p').textContent = `The free OpenStreetMap servers did not answer (${searchError}). They are sometimes busy or limit repeated requests. Wait a few seconds and try again.`;
+                document.getElementById('retryButton').classList.remove('hidden');
+                console.error('All Overpass endpoints failed:', searchError);
+                return;
+            }
+
+            const uniqueShops = new Map();
+            for (const el of elements) {
+                const tags = el.tags || {};
+                const name = (tags.name || tags['brand'] || tags['operator'] || '').trim();
+                if (!name) continue;
+                const shopLat = Number(el.lat ?? el.center?.lat);
+                const shopLon = Number(el.lon ?? el.center?.lon);
+                if (!Number.isFinite(shopLat) || !Number.isFinite(shopLon)) continue;
+
+                const distanceKm = calculateHaversineDistance(lat, lon, shopLat, shopLon);
+                const addressParts = [
+                    tags['addr:housenumber'], tags['addr:street'], tags['addr:suburb'],
+                    tags['addr:city'] || tags['addr:town'] || tags['addr:village']
+                ].filter(Boolean);
+                const address = addressParts.join(', ') || 'Address not listed on OpenStreetMap';
+                // Text that tells branches of the same brand apart: the "branch" tag, else street/area.
+                const streetLine = [tags['addr:housenumber'], tags['addr:street']].filter(Boolean).join(' ');
+                const areaLine = tags['addr:suburb'] || tags['addr:place'] || tags['addr:city'] || tags['addr:town'] || tags['addr:village'] || '';
+                const branchLabel = (tags.branch || '').trim() || [streetLine, areaLine].filter(Boolean).join(', ');
+                const key = `${name.toLowerCase()}|${shopLat.toFixed(5)}|${shopLon.toFixed(5)}`;
+                if (!uniqueShops.has(key)) {
+                    uniqueShops.set(key, {
+                        name, address, lat: shopLat, lon: shopLon,
+                        // Preserve the exact selected pin as this result's route origin.
+                        originLat: lat, originLon: lon,
+                        driveMinutes: null,
+                        distanceValue: distanceKm,
+                        distanceText: `${distanceKm.toFixed(2)} km`,
+                        roadKm: null,
+                        brand: (tags.brand || '').trim(),
+                        branchLabel,
+                        direction: compassDirection(lat, lon, shopLat, shopLon),
+                        type: tags.amenity === 'cafe' ? 'Cafe' : 'Coffee shop',
+                        openingHours: tags.opening_hours || '',
+                        website: tags.website || tags['contact:website'] || ''
+                    });
+                }
+            }
+
+            const shopsArray = Array.from(uniqueShops.values()).sort((a, b) => a.distanceValue - b.distanceValue);
+
+            // Group shops of the same brand so each branch can be told apart (1 = nearest to the pin).
+            const brandKeyOf = (shop) => (shop.brand || shop.name).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+            const brandTotals = new Map();
+            shopsArray.forEach(shop => brandTotals.set(brandKeyOf(shop), (brandTotals.get(brandKeyOf(shop)) || 0) + 1));
+            const brandSeen = new Map();
+            shopsArray.forEach(shop => {
+                const key = brandKeyOf(shop);
+                const rank = (brandSeen.get(key) || 0) + 1;
+                brandSeen.set(key, rank);
+                shop.branchRank = rank;
+                shop.branchCount = brandTotals.get(key);
+            });
+            resultsCount.textContent = `${shopsArray.length} coffee ${shopsArray.length === 1 ? 'shop' : 'shops'} found within ${(actualRadiusMeters / 1000)} km`;
+            document.getElementById('citySubtitle').textContent = `Search area: ${areaLabel} (${lat.toFixed(5)}, ${lon.toFixed(5)}) · OpenStreetMap data`;
+
+            if (shopsArray.length === 0) {
+                emptyState.classList.remove('hidden');
+                emptyState.querySelector('h3').textContent = 'No mapped coffee shops found in this area';
+                emptyState.querySelector('p').textContent = `No named coffee shops were returned within ${(actualRadiusMeters / 1000)} km of your selected pin. Try another location. Results depend on places recorded in OpenStreetMap.`;
+                return;
+            }
+
+            // Keep every result; each gets a stable id used by its card elements.
+            currentShops = shopsArray.map((shop, i) => ({ ...shop, id: i }));
+            renderShops();
+
+            // The list appears immediately; road distance and travel time are filled in
+            // afterward from OSRM so results are not delayed.
+            loadDrivingTimes(lat, lon, currentShops, thisSearchId);
+        }
+
+        function branchSummary(shop) {
+            const where = `${shop.distanceText} ${shop.direction} of your pin`;
+            return shop.branchLabel ? `${shop.branchLabel} · ${where}` : where;
+        }
+
+        // Google is given the shop's NAME plus a location hint (branch tag, street, or barangay/town).
+        // Coordinates alone make Google snap to the nearest listed place, which can be the shop next door.
+        function placeQuery(shop) {
+            const hint = shop.branchLabel || shop.locality || '';
+            return hint ? `${shop.name} ${hint}` : shop.name;
+        }
+
+        // The @lat,lon,zoom part centers Google's search on the shop's mapped position.
+        function buildPlaceDirectionsUrl(shop) {
+            return `https://www.google.com/maps/dir/${shop.originLat},${shop.originLon}/${encodeURIComponent(placeQuery(shop))}/@${shop.lat},${shop.lon},17z`;
+        }
+
+        function buildPlaceMapUrl(shop) {
+            return `https://www.google.com/maps/search/${encodeURIComponent(placeQuery(shop))}/@${shop.lat},${shop.lon},18z`;
+        }
+
+        // Barangay and town of a shop, used as a hint when OpenStreetMap has no branch or street text.
+        async function lookupLocality(lat, lon) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=16`, {
+                    headers: { 'Accept-Language': 'en' },
+                    signal: controller.signal
+                });
+                if (!res.ok) return '';
+                const a = (await res.json()).address || {};
+                const area = a.suburb || a.neighbourhood || a.quarter || a.village || a.hamlet || '';
+                const town = a.city || a.town || a.municipality || a.county || '';
+                return [area, town].filter(Boolean).join(', ');
+            } catch (e) {
+                return '';
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
+        // Runs when a Google link is clicked. If the shop has no branch/street text yet, look up its
+        // barangay/town first (tab is opened immediately so the browser does not block it).
+        async function openPlaceLink(event, id, kind) {
+            const shop = currentShops.find(s => s.id === id);
+            if (!shop || shop.branchLabel) return; // the plain link already carries branch/street text
+            event.preventDefault();
+            const urlFor = () => kind === 'dir' ? buildPlaceDirectionsUrl(shop) : buildPlaceMapUrl(shop);
+            if (shop.localityTried) { window.open(urlFor(), '_blank', 'noopener'); return; }
+            const tab = window.open('', '_blank');
+            if (tab) tab.opener = null;
+            shop.locality = await lookupLocality(shop.lat, shop.lon);
+            shop.localityTried = true;
+            if (tab) tab.location.href = urlFor(); else window.open(urlFor(), '_blank');
+        }
+
+        function buildDirectionsUrl(originLat, originLon, destinationLat, destinationLon) {
+            // Coordinates are explicit on both ends: selected pin -> clicked shop.
+            const url = new URL('https://www.google.com/maps/dir/');
+            url.searchParams.set('api', '1');
+            url.searchParams.set('origin', `${originLat},${originLon}`);
+            url.searchParams.set('destination', `${destinationLat},${destinationLon}`);
+            url.searchParams.set('travelmode', 'driving');
+            return url.toString();
+        }
+
+        function formatDuration(minutes) {
+            if (minutes < 60) return `${minutes} min`;
+            const h = Math.floor(minutes / 60), m = minutes % 60;
+            return m ? `${h} h ${m} min` : `${h} h`;
+        }
+
+        function cardHtml(shop, rank) {
+            const badge = rank === 0
+                ? (sortMode === 'time' ? (shop.driveMinutes != null ? 'FASTEST' : '') : 'NEAREST')
+                : '';
+            const distLabel = shop.roadKm != null ? `${shop.roadKm.toFixed(1)} km by road` : `${shop.distanceText} straight-line`;
+            const timeLabel = shop.driveMinutes != null
+                ? `Estimated ride: ${formatDuration(shop.driveMinutes)}`
+                : (shop.timeFailed ? 'Road travel time unavailable' : 'Estimating road travel time…');
+            return `
+                <article class="glass-card rounded-2xl overflow-hidden shadow-lg border ${rank === 0 ? 'border-amber-500' : 'border-coffee-200'} flex flex-col">
+                    <div class="relative h-24 bg-gradient-to-br from-coffee-800 to-coffee-600 flex items-center justify-center">
+                        <i class="fa-solid fa-mug-hot text-3xl text-coffee-200/80"></i>
+                        <div class="absolute top-3 left-3 bg-coffee-900 text-white text-xs font-bold px-3 py-1 rounded-full shadow">
+                            <i class="fa-solid fa-route text-amber-400 mr-1"></i><span id="dist-${shop.id}">${distLabel}</span>
+                        </div>
+                        ${badge ? `<div class="absolute top-3 right-3 bg-amber-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">${badge}</div>` : ''}
+                    </div>
+                    <div class="p-4 flex-1 flex flex-col">
+                        <h3 class="font-bold text-base text-coffee-900 mb-1">${escapeHtml(shop.name)}</h3>
+                        ${shop.branchCount > 1 ? `<span class="self-start bg-amber-100 text-amber-800 text-[10px] font-semibold px-2 py-0.5 rounded-full mb-1" title="Numbered by distance from your pin">Branch ${shop.branchRank} of ${shop.branchCount} nearby</span>` : ''}
+                        <p class="text-xs text-coffee-700 font-medium mb-1"><i class="fa-solid fa-code-branch mr-1 text-amber-600"></i>${escapeHtml(branchSummary(shop))}</p>
+                        <p class="text-xs text-coffee-600 mb-2"><i class="fa-solid fa-location-dot mr-1"></i>${escapeHtml(shop.address)}</p>
+                        <p class="text-xs text-coffee-500 mb-3">${escapeHtml(shop.type)}${shop.openingHours ? ' · Hours: ' + escapeHtml(shop.openingHours) : ''}</p>
+                        <div class="rounded-lg border border-coffee-200 bg-coffee-50 px-3 py-2 mb-3 text-xs text-coffee-700">
+                            <i class="fa-solid fa-car-side mr-1 text-amber-600"></i>
+                            <span id="ride-time-${shop.id}" aria-live="polite">${timeLabel}</span>
+                            <span class="block text-[10px] text-coffee-500 mt-1">Map-based estimate; live traffic not included.</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mt-auto">
+                            <a href="${buildPlaceMapUrl(shop)}" onclick="openPlaceLink(event, ${shop.id}, 'map')" target="_blank" rel="noopener noreferrer" class="bg-coffee-800 hover:bg-coffee-900 text-white text-center py-2.5 rounded-xl text-xs font-medium">View on Map</a>
+                            <a href="${buildPlaceDirectionsUrl(shop)}" onclick="openPlaceLink(event, ${shop.id}, 'dir')" target="_blank" rel="noopener noreferrer" class="bg-amber-600 hover:bg-amber-700 text-white text-center py-2.5 rounded-xl text-xs font-medium">Get Directions</a>
+                        </div>
+                    </div>
+                </article>`;
+        }
+
+        function renderShops() {
+            const byDistance = (a, b) => a.distanceValue - b.distanceValue;
+            const byTime = (a, b) => ((a.driveMinutes ?? Infinity) - (b.driveMinutes ?? Infinity)) || byDistance(a, b);
+            const visible = currentShops.filter(s => timeFilter == null || (s.driveMinutes != null && s.driveMinutes <= timeFilter));
+            visible.sort(sortMode === 'time' ? byTime : byDistance);
+            document.getElementById('shopGrid').innerHTML = visible.map(cardHtml).join('');
+            updateControls(visible.length);
+        }
+
+        function updateControls(shown = currentShops.length) {
+            const bar = document.getElementById('controlBar');
+            const hasShops = currentShops.length > 0;
+            bar.classList.toggle('hidden', !hasShops);
+            if (!hasShops) return;
+
+            [['sortDistance', 'distance', 'Nearest'], ['sortTime', 'time', 'Fastest']].forEach(([id, mode, text]) => {
+                const b = document.getElementById(id);
+                b.textContent = text;
+                b.className = 'px-3 py-1.5 rounded-full border text-xs font-medium ' +
+                    (sortMode === mode ? 'bg-coffee-900 text-white border-coffee-900' : 'bg-white text-coffee-700 border-coffee-200 hover:bg-coffee-100');
+            });
+
+            const chips = document.getElementById('filterChips');
+            const status = document.getElementById('filterStatus');
+            if (!timesReady) {
+                chips.innerHTML = '';
+                status.textContent = `Calculating travel times… ${timesDone}/${currentShops.length}`;
+                return;
+            }
+
+            // Build the filter steps from the actual spread of travel times, up to the farthest shop.
+            const maxMin = Math.max(0, ...currentShops.map(s => s.driveMinutes ?? 0));
+            if (maxMin === 0) {
+                chips.innerHTML = '';
+                status.textContent = 'Travel times unavailable, so time filters cannot be shown.';
+                return;
+            }
+            const countWithin = (m) => currentShops.filter(s => s.driveMinutes != null && s.driveMinutes <= m).length;
+            const marks = [];
+            let previous = 0;
+            for (const m of TIME_MARKS) {
+                if (m >= maxMin) break;
+                const count = countWithin(m);
+                if (count > previous) { marks.push({ m, count }); previous = count; }
+            }
+
+            const chip = (label, active, handler) =>
+                `<button onclick="${handler}" class="px-3 py-1.5 rounded-full border text-xs font-medium ${active ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-coffee-700 border-coffee-200 hover:bg-coffee-100'}">${label}</button>`;
+            chips.innerHTML =
+                chip(`All (${currentShops.length})`, timeFilter == null, 'setTimeFilter(null)') +
+                marks.map(({ m, count }) => chip(`≤ ${m} min (${count})`, timeFilter === m, `setTimeFilter(${m})`)).join('');
+
+            const parts = [];
+            if (timeFilter != null) parts.push(`Showing ${shown} of ${currentShops.length}`);
+            parts.push(`Farthest shop: ${formatDuration(maxMin)}`);
+            status.textContent = parts.join(' · ');
+        }
+
+        function retryLastSearch() {
+            if (lastSearch) searchCoffeeEngine(lastSearch.lat, lastSearch.lon, lastSearch.areaLabel);
+        }
+
+        function setSort(mode) { sortMode = mode; renderShops(); }
+        function setTimeFilter(minutes) { timeFilter = minutes; renderShops(); }
+
+        function updateCardLive(shop, searchId) {
+            if (searchId !== activeSearchId) return;
+            const time = document.getElementById(`ride-time-${shop.id}`);
+            if (time) {
+                time.textContent = shop.driveMinutes != null ? `Estimated ride: ${formatDuration(shop.driveMinutes)}` : 'Road travel time unavailable';
+                time.title = shop.driveMinutes != null ? 'Calculated from mapped roads; live traffic is not included.' : 'The routing service could not calculate a route.';
+            }
+            const dist = document.getElementById(`dist-${shop.id}`);
+            if (dist && shop.roadKm != null) dist.textContent = `${shop.roadKm.toFixed(1)} km by road`;
+        }
+
+        async function requestTable(originLat, originLon, batch) {
+            const coordinates = [
+                [originLon, originLat],
+                ...batch.map(shop => [shop.lon, shop.lat])
+            ].map(([lng, lat]) => `${lng},${lat}`).join(';');
+            const destinationIndexes = batch.map((_, index) => index + 1).join(';');
+            const url = `https://router.project-osrm.org/table/v1/driving/${coordinates}?sources=0&destinations=${destinationIndexes}&annotations=duration,distance`;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 20000);
+            try {
+                const response = await fetch(url, { signal: controller.signal });
+                if (!response.ok) throw new Error(`Routing service returned HTTP ${response.status}`);
+                const data = await response.json();
+                if (data.code !== 'Ok' || !Array.isArray(data.durations?.[0])) {
+                    throw new Error(data.code || 'No driving-time table returned');
+                }
+                return data;
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
+        async function loadBatch(originLat, originLon, batch, searchId, depth = 0) {
+            if (searchId !== activeSearchId) return;
+            try {
+                const data = await requestTable(originLat, originLon, batch);
+                const durations = data.durations[0];
+                const distances = data.distances?.[0];
+                batch.forEach((shop, i) => {
+                    const seconds = durations[i];
+                    if (seconds == null || !Number.isFinite(seconds)) {
+                        shop.timeFailed = true;
+                    } else {
+                        shop.driveMinutes = Math.max(1, Math.round(seconds / 60));
+                        if (Number.isFinite(distances?.[i])) shop.roadKm = distances[i] / 1000;
+                    }
+                    updateCardLive(shop, searchId);
+                });
+            } catch (error) {
+                console.warn('Unable to calculate driving times for a batch:', error);
+                // A large request may be rejected or time out; retry it as two smaller halves.
+                if (batch.length > 20 && depth < 2) {
+                    const mid = Math.ceil(batch.length / 2);
+                    await loadBatch(originLat, originLon, batch.slice(0, mid), searchId, depth + 1);
+                    await loadBatch(originLat, originLon, batch.slice(mid), searchId, depth + 1);
+                    return;
+                }
+                batch.forEach(shop => { shop.timeFailed = true; updateCardLive(shop, searchId); });
+            }
+            if (searchId === activeSearchId) {
+                timesDone += batch.length;
+                updateControls();
+            }
+        }
+
+        async function loadDrivingTimes(originLat, originLon, shops, searchId) {
+            const batchSize = 90; // the public OSRM server accepts up to 100 coordinates per table request
+            for (let start = 0; start < shops.length; start += batchSize) {
+                if (searchId !== activeSearchId) return;
+                await loadBatch(originLat, originLon, shops.slice(start, start + batchSize), searchId);
+            }
+            if (searchId !== activeSearchId) return;
+            // All times are known: build the time filters, and re-order if sorted by travel time.
+            timesReady = true;
+            if (sortMode === 'time') renderShops(); else updateControls();
+        }
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[ch]);
+        }
+
+        function compassDirection(lat1, lon1, lat2, lon2) {
+            const rad = (d) => d * Math.PI / 180;
+            const y = Math.sin(rad(lon2 - lon1)) * Math.cos(rad(lat2));
+            const x = Math.cos(rad(lat1)) * Math.sin(rad(lat2)) - Math.sin(rad(lat1)) * Math.cos(rad(lat2)) * Math.cos(rad(lon2 - lon1));
+            const degrees = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+            return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(degrees / 45) % 8];
+        }
+
+        function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+            var dLat = (lat2 - lat1) * Math.PI / 180.0;
+            var dLon = (lon2 - lon1) * Math.PI / 180.0;
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(lat1 * Math.PI / 180.0) * Math.cos(lat2 * Math.PI / 180.0) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return 6371.0 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        }
+
+        window.onload = function() {
+            reverseGeocodeLocation(selectedLat, selectedLng).then(() => {
+                document.getElementById('currentLocationLabel').textContent = currentAreaName;
+                searchCoffeeEngine(selectedLat, selectedLng, currentAreaName);
+            });
+        };
+    </script>
+</body>
+</html>
