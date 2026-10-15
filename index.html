@@ -51,6 +51,8 @@
             background: #c8b7a6;
             border-radius: 4px;
         }
+        /* Locked while a search is running or the 30 s cooldown is counting down */
+        button:disabled { opacity: .45; cursor: not-allowed; }
     </style>
 </head>
 <body class="min-h-full flex flex-col bg-coffee-50">
@@ -68,11 +70,11 @@
                 </div>
             </div>
             <div class="flex items-center space-x-2">
-                <button id="gpsBtn" onclick="useGPS()" class="bg-coffee-800 hover:bg-coffee-700 text-white px-3 py-2 rounded-full text-xs font-medium border border-coffee-700 flex items-center space-x-1.5 transition">
+                <button onclick="useGPS()" class="bg-coffee-800 hover:bg-coffee-700 text-white px-3 py-2 rounded-full text-xs font-medium border border-coffee-700 flex items-center space-x-1.5 transition">
                     <i class="fa-solid fa-crosshairs text-amber-400"></i>
                     <span class="hidden sm:inline">Use Location</span>
                 </button>
-                <button id="modalOpenBtn" onclick="openLocationModal()" class="flex items-center space-x-2 bg-amber-600 hover:bg-amber-700 px-3.5 py-2 rounded-full text-xs border border-amber-600 text-white transition shadow-sm cursor-pointer font-medium">
+                <button onclick="openLocationModal()" class="flex items-center space-x-2 bg-amber-600 hover:bg-amber-700 px-3.5 py-2 rounded-full text-xs border border-amber-600 text-white transition shadow-sm cursor-pointer font-medium">
                     <i class="fa-solid fa-map-location-dot"></i>
                     <span id="currentLocationLabel">Select Location</span>
                 </button>
@@ -80,20 +82,22 @@
         </div>
     </header>
 
-    <!-- Cooldown Banner Notification -->
-    <div id="cooldownBanner" class="hidden bg-amber-500 text-coffee-900 px-4 py-2 text-center text-xs font-semibold shadow-inner transition-all duration-300">
-        ⏳ API Cooldown Active: Please wait <span id="cooldownTimerCount">30</span>s before searching again to protect public servers.
-    </div>
-
     <!-- Hero Section -->
     <section class="bg-gradient-to-b from-coffee-900 to-coffee-800 text-white py-8 px-4 text-center">
         <div class="max-w-2xl mx-auto">
-            <h1 class="text-2xl sm:text-3xl font-extrabold mb-2">Nearest Coffee Finder (7 km Optimized)</h1>
-            <p class="text-xs sm:text-sm text-coffee-300 mb-4">Pin a location to find mapped coffee shops along your riding route.</p>
-            <button id="heroMapBtn" onclick="openLocationModal()" class="bg-amber-600 hover:bg-amber-700 text-white font-medium px-5 py-2.5 rounded-xl shadow transition inline-flex items-center space-x-2 text-xs">
+            <h1 class="text-2xl sm:text-3xl font-extrabold mb-2">Nearest Coffee Finder</h1>
+            <p class="text-xs sm:text-sm text-coffee-300 mb-4">Pin a location and list mapped coffee shops nearby.</p>
+            <button onclick="openLocationModal()" class="bg-amber-600 hover:bg-amber-700 text-white font-medium px-5 py-2.5 rounded-xl shadow transition inline-flex items-center space-x-2 text-xs">
                 <i class="fa-solid fa-map"></i>
                 <span>Choose Location on Map</span>
             </button>
+            <div class="mt-5">
+                <p class="text-[11px] text-coffee-300 mb-2">Search range</p>
+                <div id="radiusOptions" class="flex justify-center gap-2"></div>
+                <p id="radiusWarning" class="hidden mt-3 mx-auto max-w-md text-[11px] text-left bg-amber-500/15 border border-amber-500/40 text-amber-200 rounded-lg px-3 py-2">
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i><span id="radiusWarningText"></span>
+                </p>
+            </div>
         </div>
     </section>
 
@@ -106,7 +110,7 @@
             </div>
             <div class="text-xs text-coffee-600 flex items-center bg-white px-3 py-1.5 rounded-lg border border-coffee-200 shadow-sm">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
-                <span>Optimized 7 km node query (OpenStreetMap)</span>
+                <span>API by OpenStreetMap (free servers can be slow; after every search, controls lock for 30 seconds to keep the service stable)</span>
             </div>
         </div>
 
@@ -114,7 +118,7 @@
         <div id="loadingState" class="text-center py-20">
             <div class="inline-block w-10 h-10 border-4 border-amber-600 border-t-transparent rounded-full animate-spin mb-3"></div>
             <p class="text-sm font-bold text-coffee-900" id="loadingText">Finding coffee shops...</p>
-            <p class="text-xs text-coffee-600 mt-1">Scanning 7 km radius...</p>
+            <p class="text-xs text-coffee-600 mt-1">Searching mapped coffee locations</p>
         </div>
 
         <div id="controlBar" class="hidden mb-4 space-y-3">
@@ -139,7 +143,7 @@
             <div class="w-14 h-14 bg-coffee-200 rounded-full flex items-center justify-center mx-auto text-coffee-600 mb-3 text-lg">
                 <i class="fa-solid fa-mug-hot"></i>
             </div>
-            <h3 class="text-base font-bold text-coffee-900 mb-1">No coffee spots within 7 km range</h3>
+            <h3 class="text-base font-bold text-coffee-900 mb-1">No coffee spots within immediate range</h3>
             <p class="text-xs text-coffee-600 mb-4">Try shifting your pin closer to a town center or commercial strip.</p>
             <div class="flex justify-center gap-2">
                 <button id="retryButton" onclick="retryLastSearch()" class="hidden bg-coffee-800 text-white px-4 py-2 rounded-lg text-xs font-medium">Try Again</button>
@@ -176,10 +180,21 @@
 
             <div class="flex justify-end space-x-2">
                 <button onclick="closeLocationModal()" class="px-4 py-2 bg-coffee-200 text-coffee-900 text-xs font-medium rounded-xl">Cancel</button>
-                <button id="confirmLocBtn" onclick="confirmLocation()" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-xl shadow">
+                <button onclick="confirmLocation()" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-xl shadow">
                     Find Coffee Shops Here
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Search lock / 30-second cooldown timer -->
+    <div id="lockBar" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-2rem)] max-w-sm bg-coffee-900 text-white rounded-2xl shadow-2xl px-4 py-3" role="status" aria-live="polite">
+        <div class="flex items-center justify-between gap-3 text-xs">
+            <span><i class="fa-solid fa-lock text-amber-400 mr-1.5"></i><span id="lockMsg"></span></span>
+            <span id="lockSeconds" class="font-bold text-amber-400 text-base tabular-nums"></span>
+        </div>
+        <div class="mt-2 h-1.5 bg-coffee-700 rounded-full overflow-hidden">
+            <div id="lockProgress" class="h-full bg-amber-500 rounded-full" style="width:0%; transition: width .25s linear;"></div>
         </div>
     </div>
 
@@ -187,12 +202,83 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         let map = null;
-        let selectedLat = 14.5772;
-        let selectedLng = 121.1321;
-        let currentAreaName = "Taytay, Rizal";
+        let selectedLat = null;
+        let selectedLng = null;
+        let currentAreaName = '';
+        const PH_CENTER = [12.8797, 121.774];
         let activeSearchId = 0;
         let reverseGeocodeRequestId = 0;
         let reverseGeocodeTimer = null;
+
+        let searchRadiusM = 7000;
+        const RADIUS_OPTIONS = [7000, 10000, 12000];
+        const COOLDOWN_SECONDS = 30;
+
+        let uiState = 'idle';
+        let lockTimer = null;
+        let cooldownEnd = 0;
+
+        function isLocked() { return uiState !== 'idle'; }
+
+        function renderRadiusOptions() {
+            document.getElementById('radiusOptions').innerHTML = RADIUS_OPTIONS.map(m => {
+                const active = m === searchRadiusM;
+                return `<button onclick="setRadius(${m})" class="px-4 py-1.5 rounded-full border text-xs font-medium ${active ? 'bg-amber-600 text-white border-amber-600' : 'bg-coffee-800 text-coffee-100 border-coffee-700 hover:bg-coffee-700'}">${m / 1000} km</button>`;
+            }).join('');
+            const warning = document.getElementById('radiusWarning');
+            const far = searchRadiusM > 7000;
+            warning.classList.toggle('hidden', !far);
+            if (far) document.getElementById('radiusWarningText').textContent =
+                `Heads up: ${searchRadiusM / 1000} km reaches farther out, so the search may be slower and the free map API is more likely to time out. Use 7 km if you see errors.`;
+            syncLock();
+        }
+
+        function setRadius(meters) {
+            if (isLocked() || meters === searchRadiusM) return;
+            searchRadiusM = meters;
+            renderRadiusOptions();
+            if (lastSearch) searchCoffeeEngine(lastSearch.lat, lastSearch.lon, lastSearch.areaLabel);
+        }
+
+        function syncLock() {
+            const locked = isLocked();
+            document.querySelectorAll('button').forEach(b => { b.disabled = locked; });
+        }
+
+        function showLockBar(message, seconds, fraction) {
+            document.getElementById('lockBar').classList.remove('hidden');
+            document.getElementById('lockMsg').textContent = message;
+            document.getElementById('lockSeconds').textContent = seconds == null ? '' : `${seconds}s`;
+            document.getElementById('lockProgress').style.width = `${Math.round(fraction * 100)}%`;
+        }
+
+        function setBusy(message) {
+            clearInterval(lockTimer);
+            uiState = 'busy';
+            showLockBar(message, null, 1);
+            syncLock();
+        }
+
+        function setIdle() {
+            clearInterval(lockTimer);
+            uiState = 'idle';
+            document.getElementById('lockBar').classList.add('hidden');
+            syncLock();
+        }
+
+        function startCooldown() {
+            clearInterval(lockTimer);
+            uiState = 'cooldown';
+            cooldownEnd = Date.now() + COOLDOWN_SECONDS * 1000;
+            const tick = () => {
+                const remaining = cooldownEnd - Date.now();
+                if (remaining <= 0) { setIdle(); return; }
+                showLockBar('Wait Lang. Masyado ka kase mabilis :D', Math.ceil(remaining / 1000), remaining / (COOLDOWN_SECONDS * 1000));
+            };
+            tick();
+            lockTimer = setInterval(tick, 250);
+            syncLock();
+        }
 
         const TIME_MARKS = [5, 10, 20, 30, 45, 60, 90, 120];
         let currentShops = [];
@@ -202,62 +288,16 @@
         let timesDone = 0;
         let timesReady = false;
 
-        // 30-Second Cooldown Logic to Prevent API Choking
-        let cooldownSeconds = 0;
-        let cooldownInterval = null;
-
-        function startCooldown(duration = 30) {
-            cooldownSeconds = duration;
-            updateCooldownUI();
-            
-            clearInterval(cooldownInterval);
-            cooldownInterval = setInterval(() => {
-                cooldownSeconds--;
-                updateCooldownUI();
-                if (cooldownSeconds <= 0) {
-                    clearInterval(cooldownInterval);
-                }
-            }, 1000);
-        }
-
-        function updateCooldownUI() {
-            const isLocked = cooldownSeconds > 0;
-            const banner = document.getElementById('cooldownBanner');
-            const timerCount = document.getElementById('cooldownTimerCount');
-            
-            const gpsBtn = document.getElementById('gpsBtn');
-            const modalOpenBtn = document.getElementById('modalOpenBtn');
-            const heroMapBtn = document.getElementById('heroMapBtn');
-            const confirmLocBtn = document.getElementById('confirmLocBtn');
-            const retryButton = document.getElementById('retryButton');
-
-            if (isLocked) {
-                if (banner) banner.classList.remove('hidden');
-                if (timerCount) timerCount.textContent = cooldownSeconds;
-            } else {
-                if (banner) banner.classList.add('hidden');
-            }
-
-            [gpsBtn, modalOpenBtn, heroMapBtn, confirmLocBtn, retryButton].forEach(btn => {
-                if (!btn) return;
-                btn.disabled = isLocked;
-                if (isLocked) {
-                    btn.classList.add('opacity-50', 'cursor-not-allowed');
-                } else {
-                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                }
-            });
-        }
-
         function openLocationModal() {
-            if (cooldownSeconds > 0) return;
+            if (isLocked()) return;
             const modal = document.getElementById('locationModal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
 
             setTimeout(() => {
                 if (!map) {
-                    map = L.map('mapPicker').setView([selectedLat, selectedLng], 14);
+                    const hasLocation = selectedLat != null && selectedLng != null;
+                    map = L.map('mapPicker').setView(hasLocation ? [selectedLat, selectedLng] : PH_CENTER, hasLocation ? 14 : 6);
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                         maxZoom: 19,
                         attribution: '&copy; OpenStreetMap'
@@ -265,8 +305,9 @@
                     map.on('moveend', updateSelectionFromMap);
                 } else {
                     map.invalidateSize(true);
-                    map.setView([selectedLat, selectedLng], map.getZoom(), { animate: false });
+                    if (selectedLat != null) map.setView([selectedLat, selectedLng], map.getZoom(), { animate: false });
                 }
+
                 map.invalidateSize(true);
                 updateSelectionFromMap();
             }, 120);
@@ -274,6 +315,11 @@
 
         function updateSelectionFromMap() {
             if (!map) return;
+            if (map.getZoom() < 10) {
+                const hint = document.getElementById('selectedLocationText');
+                if (hint) hint.textContent = 'Zoom in and pan to your area';
+                return;
+            }
             const center = map.getCenter();
             selectedLat = Number(center.lat.toFixed(6));
             selectedLng = Number(center.lng.toFixed(6));
@@ -331,26 +377,21 @@
         }
 
         async function confirmLocation() {
-            if (cooldownSeconds > 0) return;
-            if (map) {
-                const center = map.getCenter();
-                selectedLat = Number(center.lat.toFixed(6));
-                selectedLng = Number(center.lng.toFixed(6));
+            if (isLocked() || !map) return;
+            if (map.getZoom() < 10) {
+                document.getElementById('selectedLocationText').textContent = 'Zoom in closer to pin your area first';
+                return;
             }
-
+            const center = map.getCenter();
+            selectedLat = Number(center.lat.toFixed(6));
+            selectedLng = Number(center.lng.toFixed(6));
             const lat = selectedLat;
             const lon = selectedLng;
-            const confirmButton = document.getElementById('confirmLocBtn');
-            if (confirmButton) {
-                confirmButton.disabled = true;
-                confirmButton.textContent = 'Searching…';
-            }
 
             const labelAtSelection = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
             document.getElementById('currentLocationLabel').textContent = 'Pinned location';
             document.getElementById('citySubtitle').textContent = `Pinned coordinates: ${labelAtSelection}`;
             closeLocationModal();
-            
             const searchPromise = searchCoffeeEngine(lat, lon, currentAreaName || labelAtSelection);
             reverseGeocodeLocation(lat, lon).then(() => {
                 document.getElementById('currentLocationLabel').textContent = currentAreaName;
@@ -358,7 +399,6 @@
             });
             try {
                 await searchPromise;
-                startCooldown(30); // Trigger 30s cooldown after successful search completion
             } catch (error) {
                 console.error('Pinned-location search failed:', error);
                 document.getElementById('loadingState').classList.add('hidden');
@@ -367,38 +407,81 @@
                 emptyState.querySelector('h3').textContent = 'Search could not be completed';
                 emptyState.querySelector('p').textContent = 'Please check your connection and try selecting this location again.';
                 document.getElementById('resultsCount').textContent = 'Coffee search failed';
-            } finally {
-                if (confirmButton) {
-                    confirmButton.disabled = false;
-                    confirmButton.textContent = 'Find Coffee Shops Here';
-                }
             }
+        }
+
+        function getPosition() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) { reject({ code: 0 }); return; }
+                navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
+            });
+        }
+
+        function geoErrorMessage(err) {
+            const code = err && err.code;
+            if (code === 1) return 'Location access was blocked. Allow it in your browser settings, or pin your area on the map.';
+            if (code === 0) return 'Your browser does not support location detection. Pin your area on the map instead.';
+            if (code === 3) return 'Detecting your location took too long. Try again, or pin your area on the map.';
+            return 'Your location could not be determined. Try again, or pin your area on the map.';
+        }
+
+        async function locateAndSearch() {
+            const loadingState = document.getElementById('loadingState');
+            const emptyState = document.getElementById('emptyState');
+            const label = document.getElementById('currentLocationLabel');
+            setBusy('Detecting your location…');
+            if (currentShops.length === 0) {
+                emptyState.classList.add('hidden');
+                loadingState.classList.remove('hidden');
+                document.getElementById('loadingText').textContent = 'Detecting your current location…';
+                document.getElementById('resultsCount').textContent = 'Detecting your location…';
+                if (!selectedLat) label.textContent = 'Locating…';
+            }
+
+            let pos;
+            try {
+                pos = await getPosition();
+            } catch (err) {
+                setIdle();
+                const message = geoErrorMessage(err);
+                if (currentShops.length === 0) {
+                    loadingState.classList.add('hidden');
+                    if (!selectedLat) label.textContent = 'Select Location';
+                    document.getElementById('resultsCount').textContent = 'Location needed';
+                    document.getElementById('citySubtitle').textContent = 'Active Coordinates: not set';
+                    document.getElementById('retryButton').classList.add('hidden');
+                    emptyState.classList.remove('hidden');
+                    emptyState.querySelector('h3').textContent = 'We need your location';
+                    emptyState.querySelector('p').textContent = message;
+                } else {
+                    alert(message);
+                }
+                return;
+            }
+
+            selectedLat = Number(pos.coords.latitude.toFixed(6));
+            selectedLng = Number(pos.coords.longitude.toFixed(6));
+            await reverseGeocodeLocation(selectedLat, selectedLng);
+            label.textContent = currentAreaName;
+            document.getElementById('citySubtitle').textContent = `Your location: ${currentAreaName}`;
+            await searchCoffeeEngine(selectedLat, selectedLng, currentAreaName);
         }
 
         function useGPS() {
-            if (cooldownSeconds > 0) return;
-            if (!navigator.geolocation) {
-                alert("Geolocation is not supported by your browser");
-                return;
-            }
-            document.getElementById('loadingState').classList.remove('hidden');
-            document.getElementById('shopGrid').innerHTML = '';
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                selectedLat = Number(pos.coords.latitude.toFixed(6));
-                selectedLng = Number(pos.coords.longitude.toFixed(6));
-                await reverseGeocodeLocation(selectedLat, selectedLng);
-                document.getElementById('currentLocationLabel').textContent = currentAreaName;
-                document.getElementById('citySubtitle').textContent = `GPS Location: ${currentAreaName}`;
-                await searchCoffeeEngine(selectedLat, selectedLng, currentAreaName);
-                startCooldown(30);
-            }, (err) => {
-                document.getElementById('loadingState').classList.add('hidden');
-                alert("Unable to retrieve GPS location.");
-            }, { timeout: 10000 });
+            if (isLocked()) return;
+            locateAndSearch();
         }
 
-        // Optimized 7km Coffee Search Engine
         async function searchCoffeeEngine(lat, lon, areaLabel) {
+            setBusy('Searching nearby coffee shops…');
+            try {
+                await runCoffeeSearch(lat, lon, areaLabel);
+            } finally {
+                startCooldown();
+            }
+        }
+
+        async function runCoffeeSearch(lat, lon, areaLabel) {
             const thisSearchId = ++activeSearchId;
             const grid = document.getElementById('shopGrid');
             const emptyState = document.getElementById('emptyState');
@@ -417,20 +500,24 @@
             emptyState.classList.add('hidden');
             loadingState.classList.remove('hidden');
             resultsCount.textContent = `Searching coffee shops near ${areaLabel}...`;
-            loadingText.textContent = 'Scanning 7 km radius via OpenStreetMap nodes...';
+            loadingText.textContent = 'Searching OpenStreetMap for nearby coffee shops...';
 
-            const radiusMeters = 7000; // Optimized 7km range
-            const makeQuery = (radius) => `[out:json][timeout:25];(
-                node(around:${radius},${lat},${lon})["amenity"="cafe"];
-                node(around:${radius},${lat},${lon})["shop"="coffee"];
-                node(around:${radius},${lat},${lon})["cuisine"="coffee"];
-            );out tags;`;
+            const radiusMeters = searchRadiusM;
+            const makeQuery = (radius) => `[out:json][timeout:25];
+(
+  node(around:${radius},${lat},${lon})["amenity"="cafe"];
+  node(around:${radius},${lat},${lon})["shop"="coffee"];
+  node(around:${radius},${lat},${lon})["cuisine"="coffee"];
+);
+out body;`;
 
             let elements = [];
             let searchError = '';
+            const actualRadiusMeters = radiusMeters;
             const endpoints = [
                 'https://overpass-api.de/api/interpreter',
-                'https://overpass.kumi.systems/api/interpreter',
+                'https://z.overpass-api.de/api/interpreter',
+                'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
                 'https://overpass.private.coffee/api/interpreter'
             ];
 
@@ -440,7 +527,7 @@
                     let timeoutId;
                     try {
                         const controller = new AbortController();
-                        timeoutId = setTimeout(() => controller.abort(), 25000);
+                        timeoutId = setTimeout(() => controller.abort(), 30000);
                         const response = await fetch(endpoint, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
@@ -449,11 +536,11 @@
                         });
                         if (!response.ok) throw new Error(`Map database returned HTTP ${response.status}`);
                         const data = await response.json();
-                        if (!data || !Array.isArray(data.elements)) throw new Error('Invalid response.');
+                        if (!data || !Array.isArray(data.elements)) throw new Error('The map database returned an invalid response.');
                         return { elements: data.elements, error: '' };
                     } catch (err) {
                         lastError = err.message || 'Unable to contact the map database.';
-                        console.warn('Endpoint failed:', endpoint, err);
+                        console.warn('Coffee search endpoint failed:', endpoint, err);
                     } finally {
                         clearTimeout(timeoutId);
                     }
@@ -461,9 +548,15 @@
                 return { elements: [], error: lastError };
             };
 
-            const pass = await runOverpassQuery(makeQuery(radiusMeters));
-            elements = pass.elements;
-            searchError = pass.error;
+            let firstPass = await runOverpassQuery(makeQuery(radiusMeters));
+            if (firstPass.error) {
+                loadingText.textContent = 'The map server is busy. Retrying automatically…';
+                await new Promise(resolve => setTimeout(resolve, 4000));
+                if (thisSearchId !== activeSearchId) return;
+                firstPass = await runOverpassQuery(makeQuery(radiusMeters));
+            }
+            elements = firstPass.elements;
+            searchError = firstPass.error;
 
             if (thisSearchId !== activeSearchId) return;
 
@@ -472,9 +565,10 @@
             if (searchError) {
                 resultsCount.textContent = 'Could not load coffee shops';
                 emptyState.classList.remove('hidden');
-                emptyState.querySelector('h3').textContent = 'Search failed temporarily';
-                emptyState.querySelector('p').textContent = `Public servers are busy (${searchError}). Please wait for the cooldown timer to finish and try again.`;
+                emptyState.querySelector('h3').textContent = 'Coffee shop search failed';
+                emptyState.querySelector('p').textContent = `The free OpenStreetMap servers did not answer (${searchError}). They are sometimes busy or limit repeated requests. Wait a few seconds and try again.`;
                 document.getElementById('retryButton').classList.remove('hidden');
+                console.error('All Overpass endpoints failed:', searchError);
                 return;
             }
 
@@ -483,8 +577,8 @@
                 const tags = el.tags || {};
                 const name = (tags.name || tags['brand'] || tags['operator'] || '').trim();
                 if (!name) continue;
-                const shopLat = Number(el.lat);
-                const shopLon = Number(el.lon);
+                const shopLat = Number(el.lat ?? el.center?.lat);
+                const shopLon = Number(el.lon ?? el.center?.lon);
                 if (!Number.isFinite(shopLat) || !Number.isFinite(shopLon)) continue;
 
                 const distanceKm = calculateHaversineDistance(lat, lon, shopLat, shopLon);
@@ -497,7 +591,6 @@
                 const areaLine = tags['addr:suburb'] || tags['addr:place'] || tags['addr:city'] || tags['addr:town'] || tags['addr:village'] || '';
                 const branchLabel = (tags.branch || '').trim() || [streetLine, areaLine].filter(Boolean).join(', ');
                 const key = `${name.toLowerCase()}|${shopLat.toFixed(5)}|${shopLon.toFixed(5)}`;
-                
                 if (!uniqueShops.has(key)) {
                     uniqueShops.set(key, {
                         name, address, lat: shopLat, lon: shopLon,
@@ -517,18 +610,31 @@
             }
 
             const shopsArray = Array.from(uniqueShops.values()).sort((a, b) => a.distanceValue - b.distanceValue);
-            resultsCount.textContent = `${shopsArray.length} coffee ${shopsArray.length === 1 ? 'shop' : 'shops'} found within 7 km`;
-            document.getElementById('citySubtitle').textContent = `Search area: ${areaLabel} (${lat.toFixed(5)}, ${lon.toFixed(5)}) · OpenStreetMap nodes`;
+
+            const brandKeyOf = (shop) => (shop.brand || shop.name).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+            const brandTotals = new Map();
+            shopsArray.forEach(shop => brandTotals.set(brandKeyOf(shop), (brandTotals.get(brandKeyOf(shop)) || 0) + 1));
+            const brandSeen = new Map();
+            shopsArray.forEach(shop => {
+                const key = brandKeyOf(shop);
+                const rank = (brandSeen.get(key) || 0) + 1;
+                brandSeen.set(key, rank);
+                shop.branchRank = rank;
+                shop.branchCount = brandTotals.get(key);
+            });
+            resultsCount.textContent = `${shopsArray.length} coffee ${shopsArray.length === 1 ? 'shop' : 'shops'} found within ${(actualRadiusMeters / 1000)} km`;
+            document.getElementById('citySubtitle').textContent = `Search area: ${areaLabel} (${lat.toFixed(5)}, ${lon.toFixed(5)}) · OpenStreetMap data`;
 
             if (shopsArray.length === 0) {
                 emptyState.classList.remove('hidden');
-                emptyState.querySelector('h3').textContent = 'No mapped coffee shops found within 7 km';
-                emptyState.querySelector('p').textContent = `No named coffee shops were returned within 7 km of your location. Try another area.`;
+                emptyState.querySelector('h3').textContent = 'No mapped coffee shops found in this area';
+                emptyState.querySelector('p').textContent = `No named coffee shops were returned within ${(actualRadiusMeters / 1000)} km of your selected pin. Try another location. Results depend on places recorded in OpenStreetMap.`;
                 return;
             }
 
             currentShops = shopsArray.map((shop, i) => ({ ...shop, id: i }));
             renderShops();
+
             loadDrivingTimes(lat, lon, currentShops, thisSearchId);
         }
 
@@ -570,6 +676,7 @@
             }
         }
 
+        // Unlocked: Map & Directions links are never blocked by the cooldown timer
         async function openPlaceLink(event, id, kind) {
             const shop = currentShops.find(s => s.id === id);
             if (!shop || shop.branchLabel) return;
@@ -581,6 +688,15 @@
             shop.locality = await lookupLocality(shop.lat, shop.lon);
             shop.localityTried = true;
             if (tab) tab.location.href = urlFor(); else window.open(urlFor(), '_blank');
+        }
+
+        function buildDirectionsUrl(originLat, originLon, destinationLat, destinationLon) {
+            const url = new URL('https://www.google.com/maps/dir/');
+            url.searchParams.set('api', '1');
+            url.searchParams.set('origin', `${originLat},${originLon}`);
+            url.searchParams.set('destination', `${destinationLat},${destinationLon}`);
+            url.searchParams.set('travelmode', 'driving');
+            return url.toString();
         }
 
         function formatDuration(minutes) {
@@ -634,7 +750,12 @@
             updateControls(visible.length);
         }
 
-        function updateControls(shown = currentShops.length) {
+        function updateControls(shown) {
+            updateControlsInner(shown);
+            syncLock();
+        }
+
+        function updateControlsInner(shown = currentShops.length) {
             const bar = document.getElementById('controlBar');
             const hasShops = currentShops.length > 0;
             bar.classList.toggle('hidden', !hasShops);
@@ -658,7 +779,7 @@
             const maxMin = Math.max(0, ...currentShops.map(s => s.driveMinutes ?? 0));
             if (maxMin === 0) {
                 chips.innerHTML = '';
-                status.textContent = 'Travel times unavailable.';
+                status.textContent = 'Travel times unavailable, so time filters cannot be shown.';
                 return;
             }
             const countWithin = (m) => currentShops.filter(s => s.driveMinutes != null && s.driveMinutes <= m).length;
@@ -683,22 +804,19 @@
         }
 
         function retryLastSearch() {
-            if (cooldownSeconds > 0) return;
-            if (lastSearch) {
-                searchCoffeeEngine(lastSearch.lat, lastSearch.lon, lastSearch.areaLabel).then(() => {
-                    startCooldown(30);
-                });
-            }
+            if (isLocked()) return;
+            if (lastSearch) searchCoffeeEngine(lastSearch.lat, lastSearch.lon, lastSearch.areaLabel);
         }
 
-        function setSort(mode) { sortMode = mode; renderShops(); }
-        function setTimeFilter(minutes) { timeFilter = minutes; renderShops(); }
+        function setSort(mode) { if (isLocked()) return; sortMode = mode; renderShops(); }
+        function setTimeFilter(minutes) { if (isLocked()) return; timeFilter = minutes; renderShops(); }
 
         function updateCardLive(shop, searchId) {
             if (searchId !== activeSearchId) return;
             const time = document.getElementById(`ride-time-${shop.id}`);
             if (time) {
                 time.textContent = shop.driveMinutes != null ? `Estimated ride: ${formatDuration(shop.driveMinutes)}` : 'Road travel time unavailable';
+                time.title = shop.driveMinutes != null ? 'Calculated from mapped roads; live traffic is not included.' : 'The routing service could not calculate a route.';
             }
             const dist = document.getElementById(`dist-${shop.id}`);
             if (dist && shop.roadKm != null) dist.textContent = `${shop.roadKm.toFixed(1)} km by road`;
@@ -793,39 +911,9 @@
             return 6371.0 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
         }
 
-        // True GPS initialization on first load with fallback to Taytay, Rizal
         window.onload = function() {
-            if (navigator.geolocation) {
-                document.getElementById('loadingState').classList.remove('hidden');
-                document.getElementById('loadingText').textContent = 'Detecting your current GPS location...';
-                navigator.geolocation.getCurrentPosition(
-                    async (pos) => {
-                        selectedLat = Number(pos.coords.latitude.toFixed(6));
-                        selectedLng = Number(pos.coords.longitude.toFixed(6));
-                        await reverseGeocodeLocation(selectedLat, selectedLng);
-                        document.getElementById('currentLocationLabel').textContent = currentAreaName;
-                        document.getElementById('citySubtitle').textContent = `GPS Location: ${currentAreaName}`;
-                        await searchCoffeeEngine(selectedLat, selectedLng, currentAreaName);
-                        startCooldown(30);
-                    },
-                    async (err) => {
-                        console.warn("GPS unavailable or denied, falling back to Taytay, Rizal.");
-                        selectedLat = 14.5772;
-                        selectedLng = 121.1321;
-                        await reverseGeocodeLocation(selectedLat, selectedLng);
-                        document.getElementById('currentLocationLabel').textContent = currentAreaName;
-                        await searchCoffeeEngine(selectedLat, selectedLng, currentAreaName);
-                        startCooldown(30);
-                    },
-                    { timeout: 10000 }
-                );
-            } else {
-                reverseGeocodeLocation(selectedLat, selectedLng).then(async () => {
-                    document.getElementById('currentLocationLabel').textContent = currentAreaName;
-                    await searchCoffeeEngine(selectedLat, selectedLng, currentAreaName);
-                    startCooldown(30);
-                });
-            }
+            renderRadiusOptions();
+            locateAndSearch();
         };
     </script>
 </body>
